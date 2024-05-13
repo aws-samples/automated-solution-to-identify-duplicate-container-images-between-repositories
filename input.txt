@@ -1,1 +1,0 @@
-public.ecr.aws/amazonlinux/amazonlinux:2018.03
