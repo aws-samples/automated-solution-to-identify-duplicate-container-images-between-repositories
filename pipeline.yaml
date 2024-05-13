@@ -1,0 +1,306 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This CFN template creates pipeline using CodePipelne with source and clone stages to clone CodeCommit repository to destination account.
+Parameters:
+  CodeBuildPolicyName:
+    Type: String
+    Description: CodeBuild IAM policy name.
+    Default: ImageAvailabilityCheckCodeBuildPolicy
+  CodeBuildRoleName:
+    Type: String
+    Description: CodeBuild IAM role name.
+    Default: ImageAvailabilityCheckCodeBuildRole
+  CodePipelinePolicyName:
+    Type: String
+    Description: CodePipeline IAM policy name.
+    Default: ImageAvailabilityCheckCodePipelinePolicy
+  CodePipelineRoleName:
+    Type: String
+    Description: CodePipeline IAM role name.
+    Default: ImageAvailabilityCheckCodePipelineRole
+  RepositoryName:
+    Type: String
+    Description: CodeCommit Repository name.
+    Default: ImageAvailabilityCheckRepository
+  RepositoryDescription:
+    Type: String
+    Description: CodeCommit Repository description.
+    Default: CodeCommit repository for Image Availability Check
+  CodeBuildProjectName:
+    Type: String
+    Description: Project Name for CodeBuild Project.
+    Default: ImageAvailabilityCheckProject
+  CodeBuildProjectDescription:
+    Type: String
+    Description: Project description for CodeBuild Project.
+    Default: CodeBuild project to check if image is available in ECR
+  CodeBuildProjectEnvironmentType:
+    Type: String
+    Description: Project Environment Type.
+    Default: LINUX_CONTAINER
+  CodeBuildProjectComputeType:
+    Type: String
+    Description: Project Compute Type.
+    Default: BUILD_GENERAL1_SMALL
+  CodeBuildProjectImage:
+    Type: String
+    Description: Docker image to be used by CodeBuild Project.
+    Default: aws/codebuild/amazonlinux2-x86_64-standard:5.0
+  BuildSpec:
+    Type: String
+    Description: BuildSpec file name
+    Default: buildspec.yml
+  ArtifactStoreBucketName:
+    Type: String
+    Description: Bucket to store CodePipeline Artifacts.
+  PipelineName:
+    Type: String
+    Description: Name for CodePipeline.
+    Default: ImageAvailabilityCheckPipeline
+  OutputBucket:
+    Type: String
+    Description: Bucket to store Output of image availaibility check in ECR
+  SourceImageFile:
+    Type: String
+    Description: Textfile name where image respository details are stored
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "IAM roles for CodeBuild"
+        Parameters:
+          - CodeBuildPolicyName
+          - CodeBuildRoleName
+      -
+        Label:
+          default: "IAM roles for CodePipeline"
+        Parameters:
+          - CodePipelinePolicyName
+          - CodePipelineRoleName
+      -
+        Label:
+          default: "CodeCommit Repository configuration"
+        Parameters:
+          - RepositoryName
+          - RepositoryDescription
+      -
+        Label:
+          default: "CodeBuild Project configuration"
+        Parameters:
+          - CodeBuildProjectName
+          - CodeBuildProjectDescription
+          - CodeBuildProjectEnvironmentType
+          - CodeBuildProjectComputeType
+          - CodeBuildProjectImage
+          - BuildSpec
+      -
+        Label:
+          default: "CodePipeline configuration"
+        Parameters:
+          - ArtifactStoreBucketName
+          - PipelineName
+      -
+        Label:
+          default: Bash Script parameters
+        Parameters:
+          - OutputBucket
+
+Resources:
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref CodeBuildRoleName
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: IAM role for CodeBuild Service
+      Policies:
+        - PolicyName: !Ref CodeBuildPolicyName
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - "codecommit:GitPull"
+                  - "codecommit:GitPush"
+                  - "codebuild:CreateReportGroup"
+                  - "codebuild:CreateReport"
+                  - "codebuild:UpdateReport"
+                  - "codebuild:BatchPutTestCases"
+                  - "codebuild:BatchPutCodeCoverages"
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ArtifactStoreBucket}/*'
+                  - !Sub 'arn:aws:s3:::${OutputS3Bucket}/*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuildProjectName}'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuildProjectName}:*'
+                  - !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${Repository.Name}'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${CodeBuildProjectName}'
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref CodePipelineRoleName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: IAM role for CodePipelne Service
+      Policies:
+        - PolicyName: !Ref CodePipelinePolicyName
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "codecommit:CancelUploadArchive"
+                  - "codecommit:GetBranch"
+                  - "codecommit:GetCommit"
+                  - "codecommit:GetRepository"
+                  - "codecommit:GetUploadArchiveStatus"
+                  - "codecommit:GitPull"
+                  - "codecommit:UploadArchive"
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                  - "codebuild:BatchGetBuildBatches"
+                  - "codebuild:StartBuildBatch"
+                Resource:
+                  - !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${Repository.Name}'
+                  - !Sub 'arn:aws:s3:::${ArtifactStoreBucket}/*'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${CodeBuildProjectName}'
+                  - !Sub 'arn:aws:s3:::${OutputS3Bucket}/*'
+  Repository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryName: !Ref RepositoryName
+      RepositoryDescription: !Ref RepositoryDescription
+  ImageAvailabilityProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Description: !Ref CodeBuildProjectDescription
+      Environment:
+        Type: !Ref CodeBuildProjectEnvironmentType
+        ComputeType: !Ref CodeBuildProjectComputeType
+        Image: !Ref CodeBuildProjectImage
+        ImagePullCredentialsType: CODEBUILD
+        PrivilegedMode: false
+        EnvironmentVariables:
+          - Name: SOURCE_IMAGE_FILE
+            Type: PLAINTEXT
+            Value: !Ref SourceImageFile
+          - Name: ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Ref "AWS::AccountId"
+          - Name: OUTPUT_S3_BUCKET
+            Type: PLAINTEXT
+            Value: !Ref OutputS3Bucket
+      Name: !Ref CodeBuildProjectName
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Source:
+        BuildSpec: !Ref BuildSpec
+        Type: CODEPIPELINE
+  ArtifactStoreBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref ArtifactStoreBucketName
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactStoreBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - 's3:*'
+            Effect: Deny
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref ArtifactStoreBucket
+                - /*
+            Principal: '*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+
+  OutputS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref OutputBucket
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+                      
+  ImageAvailabilityCheckPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactStoreBucket
+      Name: !Ref PipelineName
+      RoleArn:  !GetAtt CodePipelineRole.Arn
+      Stages:
+        -
+          Name: Source
+          Actions:
+            -
+              Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: CodeCommit
+              OutputArtifacts:
+                -
+                  Name: SourceOutput
+              Configuration:
+                RepositoryName: !GetAtt Repository.Name
+                BranchName: main
+              RunOrder: 1
+        -
+          Name: Validate
+          Actions:
+            -
+              Name: Validate
+              InputArtifacts:
+                -
+                  Name: SourceOutput
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref ImageAvailabilityProject
+              RunOrder: 1
