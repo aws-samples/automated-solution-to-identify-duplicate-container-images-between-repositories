@@ -14,6 +14,9 @@ c) Understanding of following AWS services:
 d) CodeCommit credentials configuration
 e) Clone this Gitlab repository to your local machine.
 
+Please find the architcture diagram for reference:
+![image](https://github.com/aws-samples/automated-solution-to-identify-duplicate-container-images-between-repositories/assets/113442298/581e890b-d13d-4bec-891b-c3172f075772)
+
 
 ## Setup CI/CD pipeline
 The AWS CodePipeline will be setup with two stages to identify images that are already present in ECR repository. The pipeline will be configured with following resources:
