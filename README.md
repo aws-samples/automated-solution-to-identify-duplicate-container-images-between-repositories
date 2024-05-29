@@ -12,7 +12,7 @@ c) Understanding of following AWS services:
   5) Amazon S3
 
 d) CodeCommit credentials configuration
-e) Clone this Gitlab repository to your local machine.
+e) Clone this GitHub repository to your local machine.
 
 Please find the architcture diagram for reference:
 ![image](https://github.com/aws-samples/automated-solution-to-identify-duplicate-container-images-between-repositories/assets/113442298/581e890b-d13d-4bec-891b-c3172f075772)
